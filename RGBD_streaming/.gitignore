@@ -1,0 +1,10 @@
+# CMake // ignorer out
+out/
+out*/
+cmake-build-*/
+*.user
+.idea/
+*.iml
+# VS
+.vs/
+CMakeSettings.json
