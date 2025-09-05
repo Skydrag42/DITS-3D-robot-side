@@ -22,7 +22,7 @@ class SubprocessManager:
     # TODO: 
     # implement read_callback for piping stderr?
     # find a way to add simple writing to piped stdin?
-    def toggle_program(self, program: str, value: bool, read_callback=None):
+    def toggle_program(self, program: str, value: bool, read_callback=None, is_python=True):
         if program not in self.__processes:
             self.__processes[program] = None
 
@@ -31,7 +31,7 @@ class SubprocessManager:
             # program not yet started, asked to start
             self.__logger.logline(f"Starting subprocess {path}")
             try:
-                self.__processes[program] = Popen(["python", path], 
+                self.__processes[program] = Popen(["python", path] if is_python else path, 
                                                   stdout=PIPE if read_callback != None else None, 
                                                   creationflags=CREATE_NEW_PROCESS_GROUP)
                 self.__logger.logline(f"pid is {self.__processes[program].pid}")

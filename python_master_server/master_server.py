@@ -88,6 +88,8 @@ class MasterServer:
                     self.set_status_refresh_rate(command["command_value"])
                 case "reset_pose":
                     self.__robot.call_command("init_position")
+                case "set_3d_video_stream":
+                    self.__sp_manager.toggle_program("..\\RGBD_streaming\\out\\build\\x64-Debug\\send.exe", command["command_value"], is_python=False)
                 case _:
                     pass
 
