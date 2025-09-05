@@ -138,7 +138,7 @@ void codeThreadProcessV(GoblinData& data) {
 
         //decode_depth_z16(m.data, image_dec, imW, imH);
 
-        decodeI420toRGBA((uint8_t*)m.data, image_dec, imW, imH * 2); // attention si concatene pas oublier le fois 2
+        decodeI420toRGBA_libyuv((uint8_t*)m.data, image_dec, imW, imH * 2); // attention si concatene pas oublier le fois 2
 
         cv::Mat decMat(imH * 2, imW, CV_8UC4, image_dec);
 
@@ -175,6 +175,8 @@ int main(int argc, char** argv) {
     //string pipeStr = "mfvideosrc device-index=0 ! videoconvert ! video/x-raw,format=BGR ! appsink name=mysink max-buffers=2 sync=1";
     // 
     // OPTIMAL H264 (for the moment)
+    //string pipeStr = "udpsrc port=5000 caps=\"application/x-rtp, media=video, encoding-name=H264, payload=96\" ! rtpjitterbuffer latency = 0 ! rtph264depay ! h264parse ! nvh264dec ! videoconvert ! video/x-raw,format=I420 ! appsink name=mysink max-buffers=1 sync=false drop=true";
+    
     string pipeStr = "udpsrc port=5000 caps=\"application/x-rtp, media=video, encoding-name=H264, payload=96\" ! rtpjitterbuffer latency = 0 ! rtph264depay ! h264parse ! nvh264dec ! videoconvert ! video/x-raw,format=I420 ! appsink name=mysink max-buffers=1 sync=false drop=true";
     // 
     // TEST H265

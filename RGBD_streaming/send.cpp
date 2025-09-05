@@ -19,6 +19,7 @@
 #include <librealsense2/rs.hpp> 
 #include <opencv2/opencv.hpp>
 
+
 //======================================================================================================================
 /// A simple assertion function + macro
 inline void myAssert(bool b, const std::string &s = "MYASSERT ERROR !") {
@@ -158,11 +159,13 @@ void codeThreadSrcV(GoblinData &data) {
     }
 
     // Declare filters
-    rs2::decimation_filter dec_filter;  // Decimation - reduces depth frame density
     rs2::threshold_filter thr_filter;   // Threshold  - removes values outside recommended range
-    rs2::spatial_filter spat_filter;    // Spatial    - edge-preserving spatial smoothing
-    //rs2::temporal_filter temp_filter;   // Temporal   - reduces temporal noise
     rs2::align align_to_color(RS2_STREAM_COLOR);
+
+
+    // initialise tabulated values for encode_z16
+    initialize_z16_tables();
+    initialize_delta_table();
 
     ostringstream oss; // attention si concatene pas oublier le fois 2
     oss << "video/x-raw,format=I420,width=" << imW << ",height=" << imH * 2 << ",framerate=" << int(lround(fps)) << "/1";
@@ -198,6 +201,8 @@ void codeThreadSrcV(GoblinData &data) {
 
     auto startTime = std::chrono::steady_clock::now();
 
+
+
     for (;;) {
         // If the flag is false, go idle and wait, the pipeline does not want data for now
         if (!data.flagRunV) {
@@ -210,9 +215,6 @@ void codeThreadSrcV(GoblinData &data) {
         auto frames = rs_pipe.wait_for_frames();
 
         frames = thr_filter.process(frames);
-        //frames = spat_filter.process(frames);
-        //frames = temp_filter.process(frames);
-
 
         frames = align_to_color.process(frames);
         auto color = frames.get_color_frame(); 
@@ -221,7 +223,9 @@ void codeThreadSrcV(GoblinData &data) {
         //Copier la profondeur dans un buffer modifiable
         memcpy(depth_raw, depth.get_data(), bufferSize * 2/3 * sizeof(uint16_t));
 
-        encode_yuv420(depth_raw, depth_encoded, imW, imH);
+        // encode_yuv420(depth_raw, depth_encoded, imW, imH);
+
+        encode_yuv420_fast(depth_raw, depth_encoded, imW, imH);
 
         //decode_depth_z16(depth_encoded, depth_decoded, imW, imH);
 
@@ -245,22 +249,25 @@ void codeThreadSrcV(GoblinData &data) {
 
 
 
-        encodeRGBAtoI420((uint8_t*)color.get_data(), image_color_encoded_yuv, imW, imH);
+        encodeRGBAtoI420_libyuv((uint8_t*)color.get_data(), image_color_encoded_yuv, imW, imH);
+
+
 
         // Affichage couleur direct
 
         cv::Mat Matcouleur(imH, imW, CV_8UC4, (uint8_t*)color.get_data());
         cv::imshow("video_source", Matcouleur);
         cv::waitKey(1);
+
         concatI420Vertical(image_color_encoded_yuv, depth_encoded, (uint8_t*)frame_combined, imW, imH);
 
 
-        /*decodeI420toRGBA(frame_combined, frame_combined_decoded, imW, imH*2);
+        //decodeI420toRGBA_libyuv(frame_combined, frame_combined_decoded, imW, imH*2);
 
-        cv::Mat MatafficheRGB(imH * 2, imW, CV_8UC4, frame_combined_decoded);
+        //cv::Mat MatafficheRGB(imH * 2, imW, CV_8UC4, frame_combined_decoded);
 
-        cv::imshow("framedebut", MatafficheRGB);
-        cv::waitKey(1);*/
+        //cv::imshow("framedebut", MatafficheRGB);
+        //cv::waitKey(1);
 
         // Create a GStreamer buffer and copy data to it via a map
  
@@ -332,18 +339,31 @@ int main(int argc, char **argv) {
     // Note: we don't know image size or framerate yet !
     // We'll give preliminary caps only which we will replace later
     // format=time is not really needed for video, but audio appsrc will not work without it !
-    //string pipeStr = "appsrc name=mysrc format=time caps=video/x-raw,format=I420 ! videoconvert !udpsink host=127.0.0.1 port=5000";
-    string pipeStr = "appsrc name=mysrc format=time caps=video/x-raw,format=I420 ! queue ! videoconvert ! nvh264enc bitrate=20000 gop-size=30 ! video/x-h264, profile=high ! h264parse ! rtph264pay config-interval=1 pt=96 ! udpsink host=192.168.1.3 port=5000";
-    //string pipeStr = "appsrc name=mysrc format=time caps=video/x-raw,format=I420 !queue !videoconvert !nvh265enc bitrate = 20000 gop-size=30 preset=hq !h265parse !rtph265pay config-interval=1 pt=96 !udpsink host=127.0.0.1 port = 5000";
+   
 
-    // ! \\ OPTIMALE : celle du dessous est testée et marche bien ne pas modifier
-    //string pipeStr = "appsrc name=mysrc format=time is-live=true do-timestamp=true caps=video/x-raw,format=I420 ! queue ! videoconvert ! nvh264enc bitrate=20000 gop-size=30 preset=p1 tune=ultra-low-latency zerolatency=true ! video/x-h264,profile=main ! h264parse config-interval=1 ! rtph264pay pt=96 ! udpsink host=127.0.0.1 port=5000"; //192.168.1.2
+    //   Quality enhancements :
+    //    -`preset=hq` - High quality preset instead of default
+    //    - `rc-mode = vbr` with `max-bitrate = 30000` - Variable bitrate for better quality
+    //    - `bitrate=25000` - Increased base bitrate
+    //    - `bframes=2` - B - frames for better compression efficiency
+    //    - `cabac=true` - Better entropy coding(already default but explicit)
+    //    - `spatial-aq = true aq - strength = 8` - Adaptive quantization(lowered from default 15 as requested)
 
-    // TESTS
+    //    Quality control :
+    //    -`qp-min - i = 18 qp - max - i = 28` - Tighter QP range for I - frames
+    //    - `qp-min - p = 20 qp - max - p = 30` - Controlled P - frame quality
+    //    - `qp-min - b = 22 qp - max - b = 32` - B - frame quality limits
 
+    //    Structure improvements : 
+    //    -`gop-size = 30` - Increased from 15 for better efficiency(still reasonable for streaming)
+
+    // avec h264
+    string pipeStr = "appsrc name=mysrc format=time caps=video/x-raw,format=I420 ! queue ! videoconvert ! nvh264enc bitrate=35000 gop-size=30 repeat-sequence-header=true preset=hq rc-mode=vbr max-bitrate=40000 bframes=2 cabac=true spatial-aq=true aq-strength=8 qp-min-i=18 qp-max-i=28 qp-min-p=20 qp-max-p=30 qp-min-b=22 qp-max-b=32 ! video/x-h264,profile=high ! rtph264pay config-interval=5 pt=96 ! udpsink host=127.0.0.1 port=5000";
+    //string pipeStr = "appsrc name=mysrc format=time caps=video/x-raw,format=I420 ! queue ! videoconvert ! nvh264enc qp-const-i=0 qp-const-p=0 qp-const-b=0 gop-size=1 repeat-sequence-header=true preset=lossless bframes=0 ! video/x-h264,profile=high-4:4:4 ! rtph264pay config-interval=5 pt=96 ! udpsink host=127.0.0.1 port=5000";
+    
     // avec H265 
     // TO DO modify uri
-    //std::string pipeStr = "appsrc name=mysrc format=time is-live=true do-timestamp=true caps=video/x-raw,format=I420 ! queue leaky=downstream ! videoconvert ! nvh265enc bitrate=5000 gop-size=30 preset=p7 tune=ultra-low-latency zerolatency=true ! video/x-h265,profile=main ! h265parse config-interval=1 ! rtph265pay pt=96 ! udpsink host=127.0.0.1 port=5000"; //192.168.1.2
+    // string pipeStr = "appsrc name=mysrc format=time caps=video/x-raw,format=I420 ! queue ! videoconvert ! nvh265enc bitrate=20000 gop-size=30 repeat-sequence-header=true preset=hq rc-mode=vbr max-bitrate=25000 bframes=3 spatial-aq=true aq-strength=8 qp-min-i=20 qp-max-i=30 qp-min-p=22 qp-max-p=32 qp-min-b=24 qp-max-b=34 ! video/x-h265,profile=main ! rtph265pay config-interval=5 pt=96 ! udpsink host=127.0.0.1 port=5000";
 
     GError *err = nullptr;
     data.pipeline = gst_parse_launch(pipeStr.c_str(), &err);

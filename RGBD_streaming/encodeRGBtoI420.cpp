@@ -1,6 +1,44 @@
 ﻿#include <cstdint>
 #include <algorithm> // std::min, std::max
 
+#include "libyuv.h"
+
+#pragma comment(lib, "yuv.lib")
+
+
+
+void encodeRGBAtoI420_libyuv(const uint8_t* srcRGBA, uint8_t* dstI420, int width, int height) {
+    // Calculate plane pointers
+    uint8_t* y_plane = dstI420;
+    uint8_t* u_plane = dstI420 + (width * height);
+    uint8_t* v_plane = dstI420 + (width * height) + (width * height / 4);
+
+    // Single libyuv function call replaces all your loops!
+    int result = libyuv::ARGBToI420(
+        srcRGBA, width*4,        // Source RGBA data and stride
+        y_plane, width,            // Y plane and stride  
+        u_plane, width/2,        // U plane and stride
+        v_plane, width/2,        // V plane and stride
+        width, height
+    );
+
+}
+
+void decodeI420toRGBA_libyuv(const uint8_t* srcI420, uint8_t* dstRGBA, int width, int height) {
+    // Calculate plane pointers from I420 buffer
+    const uint8_t* y_plane = srcI420;
+    const uint8_t* u_plane = srcI420 + (width * height);
+    const uint8_t* v_plane = srcI420 + (width * height) + (width * height / 4);
+
+    // Single libyuv function call replaces all your loops!
+    int result = libyuv::I420ToARGB(
+        y_plane, width,            // Y plane and stride
+        u_plane, width / 2,        // U plane and stride
+        v_plane, width / 2,        // V plane and stride
+        dstRGBA, width * 4,        // Destination RGBA data and stride
+        width, height
+    );
+}
 
 // --- Encodage RGBA -> I420 ---
 void encodeRGBAtoI420(const uint8_t* srcRGBA, uint8_t* dstI420, int width, int height) {
