@@ -89,7 +89,7 @@ class MasterServer:
                 case "reset_pose":
                     self.__robot.call_command("init_position")
                 case "set_3d_video_stream":
-                    self.__sp_manager.toggle_program("..\\RGBD_streaming\\out\\build\\x64-Debug\\send.exe", command["command_value"], is_python=False)
+                    self.__sp_manager.toggle_program("..\\RGBD_streaming\\out\\build\\x64-Debug\\send.exe", command["command_value"], is_python=False, args=[self.__addr[0]])
                 case _:
                     pass
 
@@ -283,14 +283,17 @@ class MasterServer:
                     self.__logger.log_error(f"{MASTER_STRING} connection error.\n{str(e)}")
                     self.__just_disconnected = True
                     self.__client = None
+                    self.__sp_manager.close_all_current_programs()
                 except ConnectionResetError as e:
                     self.__logger.log_error(f"{MASTER_STRING} connection reset error.\n{str(e)}")
                     self.__just_disconnected = True
                     self.__client = None
+                    self.__sp_manager.close_all_current_programs()
                 except ConnectionAbortedError as e:
                     self.__logger.log_error(f"{MASTER_STRING} connection aborted error.\n{str(e)}")
                     self.__just_disconnected = True
                     self.__client = None
+                    self.__sp_manager.close_all_current_programs()
                 except TimeoutError as e:
                     None
                 except Exception as e:
