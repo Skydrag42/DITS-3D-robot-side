@@ -29,7 +29,7 @@ class SubprocessManager:
         path = os.path.join(os.path.dirname(__file__), program)
         if value and (self.__processes[program] == None or self.__processes[program].poll() != None):
             # program not yet started, asked to start
-            self.__logger.logline(f"Starting subprocess {path} {args}")
+            self.__logger.logline(f"Starting subprocess {[path] + args}")
             try:
                 self.__processes[program] = Popen(["python", path] + args if is_python else [path] + args, 
                                                   stdout=PIPE if read_callback != None else None, 
