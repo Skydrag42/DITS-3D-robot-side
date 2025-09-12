@@ -106,8 +106,36 @@ add_executable(rs_tests
     "encodeRGBtoI420.h"
 )
 
+add_executable(
+    quality_over_network_capture
+    quality_over_network_capture.cpp
+    "rs_tests.h" 
+    "encode_z16.cpp" 
+    "encode_z16.h" 
+    "encodeRGBtoI420.cpp" 
+    "encodeRGBtoI420.h"
+)
+
+add_executable(
+    quality_over_network_openbag
+    "quality_over_network_send.cpp" 
+    "encode_z16.cpp"
+    "encode_z16.cpp"
+    "encodeRGBtoI420.cpp" 
+    "encodeRGBtoI420.h"
+)
+
+add_executable(
+    quality_over_network_save_to_raw
+    "quality_over_network_save_to_raw.cpp"
+    "encode_z16.cpp"
+    "encode_z16.cpp"
+    "encodeRGBtoI420.cpp" 
+    "encodeRGBtoI420.h"
+)
+
 # Configure all targets
-set(ALL_TARGETS send Tests_z16_yuv receive rs_tests)
+set(ALL_TARGETS send Tests_z16_yuv receive rs_tests quality_over_network_capture quality_over_network_openbag quality_over_network_save_to_raw)
 
 foreach(target ${ALL_TARGETS})
     # Include directories
@@ -127,13 +155,13 @@ foreach(target ${ALL_TARGETS})
     )
     
     # Add RealSense for specific targets
-    if(REALSENSE_FOUND AND (${target} STREQUAL "send" OR ${target} STREQUAL "rs_tests"))
+    if(REALSENSE_FOUND AND (${target} STREQUAL "send" OR ${target} STREQUAL "rs_tests"  OR ${target} STREQUAL "quality_over_network_openbag" OR ${target} STREQUAL "quality_over_network_capture" OR ${target} STREQUAL "quality_over_network_save_to_raw"))
         target_include_directories(${target} PRIVATE ${REALSENSE_INCLUDE_DIR})
         target_link_libraries(${target} "${REALSENSE_LIB_DIR}/realsense2.lib")
     endif()
     
     # Add libyuv for targets that use encodeRGBtoI420.cpp
-    if(${target} STREQUAL "send" OR ${target} STREQUAL "receive" OR ${target} STREQUAL "rs_tests")
+    if(${target} STREQUAL "send" OR ${target} STREQUAL "receive" OR ${target} STREQUAL "rs_tests"  OR ${target} STREQUAL "quality_over_network_capture" OR ${target} STREQUAL "quality_over_network_openbag" OR ${target} STREQUAL "quality_over_network_save_to_raw")
         target_link_libraries(${target} ${LIBYUV_LIBRARY})
     endif()
 endforeach()

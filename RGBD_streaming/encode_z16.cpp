@@ -1,8 +1,7 @@
 ﻿#include "encode_z16.h"
 #include <cmath>
 
-// Nouveau encode z_16
-// permet de tester les valeurs de g_w et g_np face à la compression
+// Easy to change values g_w and g_np 
 
 
 // =======================

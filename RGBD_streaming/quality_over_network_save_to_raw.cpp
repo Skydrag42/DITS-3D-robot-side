@@ -7,6 +7,7 @@
 
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
+#include <fstream>
 
 #include "encode_z16.h"
 #include "encodeRGBtoI420.h"
@@ -80,15 +81,11 @@ static bool busProcessMsg(GstElement* pipeline, GstMessage* msg, const std::stri
         cout << "MESSAGE ELEMENT !" << endl;
         break;
 
-        // You can add more stuff here if you want
-
     default:
         cout << endl;
     }
     return true;
 }
-
-
 
 //======================================================================================================================
 /// Run the message loop for one bus
@@ -113,16 +110,22 @@ void codeThreadBus(GstElement* pipeline, GoblinData& data, const std::string& pr
 /// Appsink process thread
 void codeThreadProcessV(GoblinData& data) {
     using namespace std;
-
     initialize_delta_table();
     initialize_z16_tables();
 
     int imW = 1280;
     int imH = 720;
     uint8_t* color_rgba = new uint8_t[imH * imW * 4 * 2]; // attention si concatene pas oublier le fois 2
-    uint8_t* color_yuv = new uint8_t[imH * imW * 3 / 2];
-    uint8_t* depth_yuv = new uint8_t[imH * imW * 3 / 2];
+    uint8_t* color_yuv = new uint8_t[imH * imW * 3/2];
+    uint8_t* depth_yuv = new uint8_t[imH * imW * 3/2];
     uint16_t* depth_z16 = new uint16_t[imH * imW];
+
+    std::string filename_z16 = "z16_video1_received.raw";
+    std::string filename_ARGB = "ARGB_video1_received.raw";
+
+    // === Writting RAW files ===
+    std::ofstream ofs_Z16(filename_z16, std::ios::binary);
+    std::ofstream ofs_ARGB(filename_ARGB, std::ios::binary);
 
     for (;;) {
         // Exit on EOS
@@ -141,12 +144,15 @@ void codeThreadProcessV(GoblinData& data) {
         GstBuffer* buffer = gst_sample_get_buffer(sample);
         GstMapInfo m;
         MY_ASSERT(gst_buffer_map(buffer, &m, GST_MAP_READ));
-        MY_ASSERT(m.size == imW * imH * 1.5 * 2);
+        MY_ASSERT(m.size == imW * imH * 1.5 * 2); 
 
         deconcatI420Vertical((uint8_t*)m.data, color_yuv, depth_yuv, imW, imH);
 
         decodeI420toRGBA_libyuv(color_yuv, color_rgba, imW, imH);
         decode_depth_z16_fast(depth_yuv, depth_z16, imW, imH);
+
+        ofs_Z16.write((char*)depth_z16, imW * imH * 2);  // Z16 = 16 bits per pixel (2*8)
+        ofs_ARGB.write((char*)color_rgba, imW * imH * 4); // RGBA8 = 4*8 bits per pixel
 
         cv::Mat colorMat(imH, imW, CV_8UC4, color_rgba);
         cv::Mat depthMat(imH, imW, CV_16U, depth_z16);
@@ -155,7 +161,7 @@ void codeThreadProcessV(GoblinData& data) {
         depthMat.convertTo(depth8U, CV_8U, 255.0 / 4096);
 
         cv::imshow("Depth frame received", depth8U);
-        
+
         cv::imshow("Color frame received", colorMat);
         cv::waitKey(1);
 
@@ -170,6 +176,8 @@ void codeThreadProcessV(GoblinData& data) {
     delete[] depth_yuv;
     delete[] depth_z16;
 
+    ofs_Z16.close();
+    ofs_ARGB.close();
 }
 
 //======================================================================================================================
@@ -181,8 +189,8 @@ int main(int argc, char** argv) {
     gst_init(&argc, &argv);
 
     GoblinData data;
-    
-   
+
+
     //gchar* pipeStr = g_strdup_printf(
     //    "udpsrc uri=udp://127.0.0.1:5000 caps=\"application/x-rtp, media=video, encoding-name=H265, payload=96\" ! "
     //    "rtpjitterbuffer latency=100 ! "
@@ -216,29 +224,29 @@ int main(int argc, char** argv) {
     //    "appsink name=mysink max-buffers=1 drop=true sync=false"
     //);
 
-          gchar* pipeStr = g_strdup_printf(
-        	"udpsrc uri=udp://127.0.0.1:5000 caps=\"application/x-rtp, media=video, encoding-name=H264, payload=96\" ! "
-        	"rtpjitterbuffer latency=10 ! "
-        	"rtph264depay ! "
-        	"h264parse ! "
-        	"d3d11h264dec ! "
-        	"videoconvert ! "
-        	"video/x-raw,format=I420 ! "
-        	"appsink name=mysink emit-signals=true max-buffers=0 drop=true sync=false"
-        );
+    gchar* pipeStr = g_strdup_printf(
+        "udpsrc uri=udp://127.0.0.1:5000 caps=\"application/x-rtp, media=video, encoding-name=H264, payload=96\" ! "
+        "rtpjitterbuffer latency=10 ! "
+        "rtph264depay ! "
+        "h264parse ! "
+        "d3d11h264dec ! "
+        "videoconvert ! "
+        "video/x-raw,format=I420 ! "
+        "appsink name=mysink emit-signals=true max-buffers=0 drop=true sync=false"
+    );
 
     GError* err = nullptr;
     data.pipeline = gst_parse_launch(pipeStr, &err);
     checkErr(err);
     MY_ASSERT(data.pipeline);
-    
+
     // Find our appsink by name
     data.sinkVideo = gst_bin_get_by_name(GST_BIN(data.pipeline), "mysink");
     MY_ASSERT(data.sinkVideo);
-    
+
     // Play the pipeline
     MY_ASSERT(gst_element_set_state(data.pipeline, GST_STATE_PLAYING));
-    
+
     // Start the bus thread
     thread threadBus([&data]() -> void {
         codeThreadBus(data.pipeline, data, "GOBLIN");
