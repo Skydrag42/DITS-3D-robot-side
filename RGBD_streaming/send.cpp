@@ -361,22 +361,6 @@ int main(int argc, char **argv) {
 
     // Create GSTreamer pipeline
 
-    //   Quality enhancements :
-    //    -`preset=hq` - High quality preset instead of default
-    //    - `rc-mode = vbr` with `max-bitrate = 30000` - Variable bitrate for better quality
-    //    - `bitrate=25000` - Increased base bitrate
-    //    - `bframes=2` - B - frames for better compression efficiency
-    //    - `cabac=true` - Better entropy coding(already default but explicit)
-    //    - `spatial-aq = true aq - strength = 8` - Adaptive quantization(lowered from default 15 as requested)
-
-    //    Quality control :
-    //    -`qp-min - i = 18 qp - max - i = 28` - Tighter QP range for I - frames
-    //    - `qp-min - p = 20 qp - max - p = 30` - Controlled P - frame quality
-    //    - `qp-min - b = 22 qp - max - b = 32` - B - frame quality limits
-
-    //    Structure improvements : 
-    //    -`gop-size = 30` - Increased from 15 for better efficiency(still reasonable for streaming)
-
     // ULTRA LOW LATENCY ----- H264
     gchar* pipeStr = g_strdup_printf(
         "appsrc is-live=true name=mysrc format=time "
@@ -384,7 +368,7 @@ int main(int argc, char **argv) {
         "queue max-size-buffers=1 leaky=downstream ! "
         "videoconvert ! "
         "nvh264enc repeat-sequence-header=true preset=low-latency tune=ultra-low-latency zerolatency=true "
-        "rc-mode=cbr bitrate=20000 gop-size=1 bframes=0 cabac=false "
+        "rc-mode=cbr bitrate=20000 gop-size=5 bframes=0 cabac=false "
         "qp-min-i=20 qp-max-i=30 qp-min-p=20 qp-max-p=30 !"
         " video/x-h264,profile=baseline ! "
         "rtph264pay config-interval=1 pt=96 mtu=1200 ! "
