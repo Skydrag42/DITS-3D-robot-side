@@ -1,6 +1,3 @@
-// Created by IT-JIM
-// VIDEO1 : Send video to appsink, display with cv::imshow()
-
 #include <iostream>
 #include <string>
 #include <thread>
@@ -113,9 +110,11 @@ void codeThreadProcessV(GoblinData& data) {
     initialize_delta_table();
     initialize_z16_tables();
 
+    int num_frames = 0;
+
     int imW = 1280;
     int imH = 720;
-    uint8_t* color_rgba = new uint8_t[imH * imW * 4 * 2]; // attention si concatene pas oublier le fois 2
+    uint8_t* color_rgba = new uint8_t[imH * imW * 4 * 2];
     uint8_t* color_yuv = new uint8_t[imH * imW * 3/2];
     uint8_t* depth_yuv = new uint8_t[imH * imW * 3/2];
     uint16_t* depth_z16 = new uint16_t[imH * imW];
@@ -127,19 +126,39 @@ void codeThreadProcessV(GoblinData& data) {
     std::ofstream ofs_Z16(filename_z16, std::ios::binary);
     std::ofstream ofs_ARGB(filename_ARGB, std::ios::binary);
 
+
+    // Variables pour le timeout et la vérification EOS
+    auto last_frame_time = std::chrono::steady_clock::now();
+    const auto timeout_duration = std::chrono::seconds(5); // 5 secondes de timeout
+    bool eos_detected = false;
+
     for (;;) {
-        // Exit on EOS
+
+        // Check EOS first
         if (gst_app_sink_is_eos(GST_APP_SINK(data.sinkVideo))) {
-            cout << "EOS !" << endl;
+            cout << "EOS detected!" << endl;
+            eos_detected = true;
             break;
         }
 
-        // Pull the sample (synchronous, wait)
-        GstSample* sample = gst_app_sink_pull_sample(GST_APP_SINK(data.sinkVideo));
+        // Pull the sample with timeout (non-blocking)
+        GstSample* sample = gst_app_sink_try_pull_sample(GST_APP_SINK(data.sinkVideo), 100000000);
+
         if (sample == nullptr) {
-            cout << "NO sample !" << endl;
-            break;
+            auto current_time = std::chrono::steady_clock::now();
+            if (current_time - last_frame_time > timeout_duration) {
+                cout << "Timeout: No frames received for " << timeout_duration.count() << " seconds" << endl;
+                cout << "Assuming end of stream..." << endl;
+                break;
+            }
+            continue;
         }
+
+        last_frame_time = std::chrono::steady_clock::now();
+
+
+        num_frames += 1;
+        std::cout << num_frames << std::endl;
 
         GstBuffer* buffer = gst_sample_get_buffer(sample);
         GstMapInfo m;
@@ -153,6 +172,9 @@ void codeThreadProcessV(GoblinData& data) {
 
         ofs_Z16.write((char*)depth_z16, imW * imH * 2);  // Z16 = 16 bits per pixel (2*8)
         ofs_ARGB.write((char*)color_rgba, imW * imH * 4); // RGBA8 = 4*8 bits per pixel
+
+        ofs_Z16.flush();
+        ofs_ARGB.flush();
 
         cv::Mat colorMat(imH, imW, CV_8UC4, color_rgba);
         cv::Mat depthMat(imH, imW, CV_16U, depth_z16);
@@ -170,7 +192,6 @@ void codeThreadProcessV(GoblinData& data) {
         gst_sample_unref(sample);
 
     }
-    // Why not good closing ?
     delete[] color_yuv;
     delete[] color_rgba;
     delete[] depth_yuv;
@@ -226,13 +247,13 @@ int main(int argc, char** argv) {
 
     gchar* pipeStr = g_strdup_printf(
         "udpsrc uri=udp://127.0.0.1:5000 caps=\"application/x-rtp, media=video, encoding-name=H264, payload=96\" ! "
-        "rtpjitterbuffer latency=10 ! "
+        "rtpjitterbuffer latency=100 drop-on-latency=false !"
         "rtph264depay ! "
         "h264parse ! "
         "d3d11h264dec ! "
         "videoconvert ! "
         "video/x-raw,format=I420 ! "
-        "appsink name=mysink emit-signals=true max-buffers=0 drop=true sync=false"
+        "appsink name=mysink emit-signals=true max-buffers=0 async=false sync=true"
     );
 
     GError* err = nullptr;

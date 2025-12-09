@@ -12,6 +12,7 @@
 #include <gst/app/gstappsrc.h>
 #include <fstream>
 #include <string>
+#include <algorithm> 
 
 #define WIDTH 1280
 #define HEIGHT 720
@@ -578,7 +579,7 @@ int benchmark4() {
 }
 
 
-int record_raw() {
+int record_and_raw() {
 
     std::cout << "Starting raw recording program" << std::endl;
     rs2::pipeline rs_pipe;
@@ -708,28 +709,80 @@ int record_raw() {
     return 0;
 }
 
-double mse(uint16_t* reference, uint16_t* received, int height, int width){
-    double sum = 0;
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
+int play() {
+    std::string filename_z16 = "z16_video5.raw";
+    std::string filename_ARGB = "ARGB_video5.raw";
 
-            sum += pow(reference[x + y * width] - received[x + y * width], 2);
-        }
+
+    // === Reading RAW files ===
+    std::ifstream ifs_Z16(filename_z16, std::ios::binary);
+    std::ifstream ifs_ARGB(filename_ARGB, std::ios::binary);
+
+    if (!ifs_Z16.is_open() || !ifs_ARGB.is_open()) {
+        std::cerr << "Impossible d'ouvrir les fichiers RAW" << std::endl;
+        return -1;
     }
 
-    return sum / (height * width);
+    size_t frame_size_z16 = WIDTH * HEIGHT * 2;  // uint16_t
+    size_t frame_size_argb = WIDTH * HEIGHT * 4; // uint8_t x4
+
+    uint16_t* depth = new uint16_t[frame_size_z16];
+    uint8_t* color = new uint8_t[frame_size_argb];
+
+    while (true)
+    {
+
+        ifs_Z16.read((char*)depth, frame_size_z16);
+        if (!ifs_Z16) break; // check if end of file.
+
+
+        ifs_ARGB.read((char*)color, frame_size_argb);
+        if (!ifs_ARGB) break; // check if end of file.
+
+        
+        cv::Mat depthMat(HEIGHT, WIDTH, CV_16U, depth);
+        cv::Mat colorMat(HEIGHT, WIDTH, CV_8UC4, color);
+       
+        cv::Mat depth8U;
+        depthMat.convertTo(depth8U, CV_8U, 255.0 / 4096); // suppose max 10m
+
+        cv::Mat rgb;
+        cv::cvtColor(colorMat, rgb, cv::COLOR_RGBA2BGR);
+
+        cv::imshow("Depth (Playback)", depth8U);
+        cv::imshow("Color (Playback)", rgb);
+
+        int key = cv::waitKey(30);
+        if (key == 'q' || key == 27)
+            break;
+    }
+
+    ifs_Z16.close();
+    ifs_ARGB.close();
+    return 0;
+}
+
+double mse(uint16_t* reference, uint16_t* received, int height, int width) {
+    
+    double sum = 0;
+    int size = height * width;
+    for (int x = 0; x < size; x++) {
+        double diff = reference[x] - received[x];
+        sum += diff * diff;
+    }
+    double val = sum / size;
+    if (val == 0.0) return INFINITY;
+    return val;
 }
 
 double psnr(double mse) {
-    return 10 * log10(pow(2, 13) / mse);
+    double max_val = pow(2, 12) - 1;
+    return 10 * log10(max_val*max_val / mse);
 }
 
-
-int quality_test() {
-    
-
-    std::string filename_z16_received = "z16_video1_received.raw";
-    std::string filename_z16_reference = "z16_video1.raw";
+int synchro(std::string filename_z16_received, std::string filename_z16_reference, int height, int width) {
+    using namespace std;
+    vector<double> table_offset = {};
 
     // === Reading RAW files ===
     std::ifstream ifs_Z16_received(filename_z16_received, std::ios::binary);
@@ -740,31 +793,81 @@ int quality_test() {
         return -1;
     }
 
-    size_t frame_size_z16 = WIDTH * HEIGHT * 2;  // uint16_t
+    int frame_size_z16 = WIDTH * HEIGHT;
+    int frame_size_bytes = frame_size_z16 * sizeof(uint16_t);
+
+    uint16_t* depth_received = new uint16_t[frame_size_z16];
+    uint16_t* depth_reference = new uint16_t[frame_size_z16];
+
+    ifs_Z16_reference.read((char*)depth_reference, frame_size_bytes);
+    if (!ifs_Z16_reference) return -1;
+
+    for (int i = 0; i < 100; i++) {
+        ifs_Z16_received.read((char*)depth_received, frame_size_bytes);
+        if (!ifs_Z16_received) break;
+
+        table_offset.push_back(psnr(mse(depth_reference, depth_received, height, width)));
+    }
+
+    auto it = max_element(table_offset.begin(), table_offset.end());
+    int index = distance(table_offset.begin(), it);
+
+    delete[] depth_received;
+    delete[] depth_reference;
+    ifs_Z16_received.close();
+    ifs_Z16_reference.close();
+
+    return index;
+}
+
+int quality_test() {
+    std::string filename_z16_received = "z16_video5_received.raw";
+    std::string filename_z16_reference = "z16_video5.raw";
+
+    // === Reading RAW files ===
+    std::ifstream ifs_Z16_received(filename_z16_received, std::ios::binary);
+    std::ifstream ifs_Z16_reference(filename_z16_reference, std::ios::binary);
+
+    if (!ifs_Z16_reference.is_open() || !ifs_Z16_received.is_open()) {
+        std::cerr << "Impossible d'ouvrir les fichiers RAW" << std::endl;
+        return -1;
+    }
+
+    int frame_size_z16 = WIDTH * HEIGHT;
+    int frame_size_bytes = frame_size_z16 * sizeof(uint16_t);
 
     uint16_t* depth_received = new uint16_t[frame_size_z16];
     uint16_t* depth_reference = new uint16_t[frame_size_z16];
 
     double PSNR = 0;
-    double MSE = 0;
+    double MSE = INFINITY;
+    double average_PSNR = 0;
+    int start = 0; //synchro(filename_z16_received, filename_z16_reference, HEIGHT, WIDTH); // No need to synchronise when local compression is done.
+    int end = 0;
+    std::cout << "START_SYNCHRO " << start << std::endl;
+    ifs_Z16_received.seekg((long long)start * frame_size_bytes, std::ios::beg);
 
-    while (true)
-    {
+    for (int x = 1; x < 350-start; x++) {
 
-        ifs_Z16_received.read((char*)depth_received, frame_size_z16);
+        ifs_Z16_received.read((char*)depth_received, frame_size_bytes);
         if (!ifs_Z16_received) break; // check if end of file.
 
 
-        ifs_Z16_reference.read((char*)depth_reference, frame_size_z16);
+        ifs_Z16_reference.read((char*)depth_reference, frame_size_bytes);
         if (!ifs_Z16_reference) break; // check if end of file.
 
-        
+ 
+
         MSE = mse(depth_reference, depth_received, HEIGHT, WIDTH);
         PSNR = psnr(MSE);
-
+        average_PSNR += PSNR;
+        end = x;
         std::cout << "PSNR =" << PSNR << " MSE = " << MSE<< std::endl;
 
     }
+
+    average_PSNR = average_PSNR / end;
+    std::cout << "average_PSNR : " << average_PSNR << std::endl;
 
     ifs_Z16_received.close();
     ifs_Z16_reference.close();

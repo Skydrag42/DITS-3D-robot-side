@@ -5,11 +5,11 @@
 #include <algorithm>
 #include <limits>
 #include <functional>
-#include "encode_z16.h"  // contient encode_yuv420 et decode_depth_z16
+#include "encode_z16.h"
 
-// Renomer ce fichier : Test_z16_yuv.cpp
+// This code is used to test transformation from yuv to z_16 and reconstruction
 
-// --- Génération de données de profondeur synthétiques ---
+// --- Generate synthetic values of depth ---
 void generateSyntheticDepth(std::vector<uint16_t>& depth, int width, int height) {
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
@@ -17,7 +17,7 @@ void generateSyntheticDepth(std::vector<uint16_t>& depth, int width, int height)
             float fy = static_cast<float>(y) / height;
             float val = (fx + fy + 0.5f * std::sin(10 * fx * fy)) * 4096.0f;
             if (val < 0) val = 0;
-            if (val > 4095) val = 4095;  // limitation à la plage effective
+            if (val > 4095) val = 4095;
             depth[y * width + x] = static_cast<uint16_t>(val);
         }
     }
@@ -43,7 +43,7 @@ void generateConstantDepth(std::vector<uint16_t>& depth, int width, int height, 
     std::fill(depth.begin(), depth.end(), value);
 }
 
-// --- Comparaison entre original et reconstruit ---
+// --- Compare original and transformed data ---
 void evaluate(const std::vector<uint16_t>& original, const std::vector<uint16_t>& reconstructed,
     const std::string& label) {
     uint64_t totalDiff = 0;
@@ -63,23 +63,23 @@ void evaluate(const std::vector<uint16_t>& original, const std::vector<uint16_t>
 
     double avgDiff = static_cast<double>(totalDiff) / count;
 
-    std::cout << "===== Résultats du test: " << label << " =====\n";
-    std::cout << "Nombre de pixels : " << count << "\n";
-    std::cout << "Erreur moyenne   : " << avgDiff << "\n";
-    std::cout << "Erreur max       : " << maxDiff << "\n";
-    std::cout << "Plage attendue   : 0..4095\n";
-    std::cout << "Valeurs reconstruites: min=" << minVal << " max=" << maxVal << "\n";
+    std::cout << "===== Tests results: " << label << " =====\n";
+    std::cout << "Number of pixels: " << count << "\n";
+    std::cout << "Mean error: " << avgDiff << "\n";
+    std::cout << "MAx error: " << maxDiff << "\n";
+    std::cout << "Data range expected: 0..4095\n";
+    std::cout << "Reconstructed values: min=" << minVal << " max=" << maxVal << "\n";
     std::cout << "============================================\n\n";
 }
 
-// --- Pipeline encode/décode/test ---
+// --- Encode/Decode/Test pipeline ---
 void runTest(std::function<void(std::vector<uint16_t>&, int, int)> generator,
     const std::string& label, int width, int height) {
     std::vector<uint16_t> depthIn(width * height);
     std::vector<uint16_t> depthOut(width * height);
     std::vector<uint8_t> yuv420(width * height * 3 / 2);
 
-    generator(depthIn, width, height);  // génération de l’image de test
+    generator(depthIn, width, height);
 
     encode_yuv420(depthIn.data(), yuv420.data(), width, height);
     decode_depth_z16(yuv420.data(), depthOut.data(), width, height);
@@ -91,11 +91,11 @@ int main() {
     const int width = 1280;
     const int height = 720;
 
-    runTest(generateSyntheticDepth, "Sinusoïde + diagonale", width, height);
-    runTest(generateHorizontalRamp, "Rampe horizontale", width, height);
-    runTest(generateVerticalRamp, "Rampe verticale", width, height);
+    runTest(generateSyntheticDepth, "Diagonal and sinusoidal", width, height);
+    runTest(generateHorizontalRamp, "Horizontal ramp", width, height);
+    runTest(generateVerticalRamp, "Vertical Ramp", width, height);
 
-    // Cas spéciaux : on utilise un lambda qui fixe la valeur constante
+   
     runTest([&](std::vector<uint16_t>& d, int w, int h) { generateConstantDepth(d, w, h, 1000); }, "Constant (1000)", width, height);
     runTest([&](std::vector<uint16_t>& d, int w, int h) { generateConstantDepth(d, w, h, 2000); }, "Constant (2000)", width, height);
     runTest([&](std::vector<uint16_t>& d, int w, int h) { generateConstantDepth(d, w, h, 3500); }, "Constant (3500)", width, height);

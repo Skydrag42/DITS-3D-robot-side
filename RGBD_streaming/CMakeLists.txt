@@ -134,8 +134,17 @@ add_executable(
     "encodeRGBtoI420.h"
 )
 
+add_executable(
+    local_compression
+    "local_compression.cpp"
+    "encode_z16.cpp"
+    "encode_z16.cpp"
+    "encodeRGBtoI420.cpp" 
+    "encodeRGBtoI420.h"
+)
+
 # Configure all targets
-set(ALL_TARGETS send Tests_z16_yuv receive rs_tests quality_over_network_capture quality_over_network_openbag quality_over_network_save_to_raw)
+set(ALL_TARGETS send Tests_z16_yuv receive rs_tests quality_over_network_capture quality_over_network_openbag quality_over_network_save_to_raw local_compression)
 
 foreach(target ${ALL_TARGETS})
     # Include directories
@@ -155,13 +164,13 @@ foreach(target ${ALL_TARGETS})
     )
     
     # Add RealSense for specific targets
-    if(REALSENSE_FOUND AND (${target} STREQUAL "send" OR ${target} STREQUAL "rs_tests"  OR ${target} STREQUAL "quality_over_network_openbag" OR ${target} STREQUAL "quality_over_network_capture" OR ${target} STREQUAL "quality_over_network_save_to_raw"))
+    if(REALSENSE_FOUND AND (${target} STREQUAL "send" OR ${target} STREQUAL "rs_tests"  OR ${target} STREQUAL "quality_over_network_openbag" OR ${target} STREQUAL "quality_over_network_capture" OR ${target} STREQUAL "quality_over_network_save_to_raw" OR ${target} STREQUAL "local_compression"))
         target_include_directories(${target} PRIVATE ${REALSENSE_INCLUDE_DIR})
         target_link_libraries(${target} "${REALSENSE_LIB_DIR}/realsense2.lib")
     endif()
     
     # Add libyuv for targets that use encodeRGBtoI420.cpp
-    if(${target} STREQUAL "send" OR ${target} STREQUAL "receive" OR ${target} STREQUAL "rs_tests"  OR ${target} STREQUAL "quality_over_network_capture" OR ${target} STREQUAL "quality_over_network_openbag" OR ${target} STREQUAL "quality_over_network_save_to_raw")
+    if(${target} STREQUAL "send" OR ${target} STREQUAL "receive" OR ${target} STREQUAL "rs_tests"  OR ${target} STREQUAL "quality_over_network_capture" OR ${target} STREQUAL "quality_over_network_openbag" OR ${target} STREQUAL "quality_over_network_save_to_raw" OR ${target} STREQUAL "local_compression")
         target_link_libraries(${target} ${LIBYUV_LIBRARY})
     endif()
 endforeach()

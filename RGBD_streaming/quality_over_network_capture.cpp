@@ -1,6 +1,3 @@
-// rs_tests.cpp : définit le point d'entrée de l'application.
-//
-
 #include "rs_tests.h"
 #include "encode_z16.h"
 #include "encodeRGBtoI420.h"
@@ -56,8 +53,8 @@ int record_raw() {
 
     std::cout << "Recording to recording to z16 Press ENTER to stop..." << std::endl;
     int i = 0;
-    std::string filename_z16 = "z16_video3.raw";
-    std::string filename_ARGB = "ARGB_video3.raw";
+    std::string filename_z16 = "z16_video6.raw";
+    std::string filename_ARGB = "ARGB_video6.raw";
 
     // === Writting RAW files ===
     std::ofstream ofs_Z16(filename_z16, std::ios::binary);

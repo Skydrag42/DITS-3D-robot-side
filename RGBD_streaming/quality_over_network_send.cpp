@@ -1,7 +1,3 @@
-//
-// Created by IT-JIM 
-// VIDEO2: Decode a video file with opencv and send to a gstreamer pipeline via appsrc
-
 #include <iostream>
 #include <string>
 #include <thread>
@@ -179,6 +175,8 @@ void codeThreadSrcV(GoblinData& data) {
     uint16_t* depth = new uint16_t[frame_size_z16];
     uint8_t* color = new uint8_t[frame_size_argb];
 
+    this_thread::sleep_for(chrono::milliseconds(100));
+
     for (;;) {
 
         // If the flag is false, go idle and wait, the pipeline does not want data for now
@@ -188,18 +186,17 @@ void codeThreadSrcV(GoblinData& data) {
             continue;
         }
 
-        this_thread::sleep_for(chrono::milliseconds(16)); // Expliquer pk
-
         ifs_Z16.read((char*)depth, frame_size_z16);
         if (!ifs_Z16) break; // check if end of file.
 
         ifs_ARGB.read((char*)color, frame_size_argb);
         if (!ifs_ARGB) break; // check if end of file.
 
+        this_thread::sleep_for(chrono::milliseconds(33)); // Expliquer pk
 
-        cv::Mat Matcouleur(imH, imW, CV_8UC4, (uint8_t*)color);
+       /* cv::Mat Matcouleur(imH, imW, CV_8UC4, (uint8_t*)color);
         cv::imshow("video_source", Matcouleur);
-        cv::waitKey(1);
+        cv::waitKey(1);*/
 
         //Copier la profondeur dans un buffer modifiable
         memcpy((uint16_t*)depth_raw, (uint16_t*)depth, bufferSize * 2 / 3 * sizeof(uint16_t));
@@ -224,19 +221,23 @@ void codeThreadSrcV(GoblinData& data) {
         buffer->pts = uint64_t(frameCount / fps * GST_SECOND);
 
         // Send buffer to gstreamer
+        GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale(1, GST_SECOND, 30);
         GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC(data.srcVideo), buffer);
 
         ++frameCount;
         auto currentTime = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
 
+        std::cout << frameCount << std::endl;
+
         if (elapsed >= 1) {  // Every second
-            std::cout << "FPS: " << frameCount / elapsed << std::endl;
-            frameCount = 0;
+            //std::cout << "FPS: " << frameCount / elapsed << std::endl;
+            //frameCount = 0;
             startTime = currentTime;
         }
     }
-
+    // Signal EOF to the pipeline
+    gst_app_src_end_of_stream(GST_APP_SRC(data.srcVideo));
     delete[] depth_raw;
     delete[] depth_encoded;
     delete[] depth_decoded;
@@ -245,9 +246,6 @@ void codeThreadSrcV(GoblinData& data) {
     // Do not forget to close reading
     ifs_Z16.close();
     ifs_ARGB.close();
-    // Signal EOF to the pipeline
-    gst_app_src_end_of_stream(GST_APP_SRC(data.srcVideo));
-
 }
 
 //======================================================================================================================
@@ -347,21 +345,42 @@ int main(int argc, char** argv) {
 
 
 
-    // ULTRA LOW LATENCY ----- TO KEEEEEEEEEPPPPPP H264
+    // ULTRA LOW LATENCY H264
     gchar* pipeStr = g_strdup_printf(
-        "appsrc is-live=true name=mysrc format=time "
+        "appsrc is-live=false name=mysrc format=time caps=video/x-raw,format=I420,framerate=30/1 ! "
+        "queue max-size-buffers=1 ! videoconvert ! "
+        "nvh264enc repeat-sequence-header=true preset=low-latency tune=ultra-low-latency zerolatency=true "
+        "rc-mode=cbr bitrate=20000 gop-size=1 bframes=0 cabac=false "
+        "qp-min-i=20 qp-max-i=30 qp-min-p=20 qp-max-p=30 ! "
+        "video/x-h264,profile=baseline ! "
+        "tee name=t "
+
+        /* Display Branch */
+        "t. ! queue ! h264parse ! avdec_h264 ! "
+        "fpsdisplaysink video-sink=autovideosink text-overlay=true sync=false "
+
+        /* UDP Branch */
+        "t. ! queue ! rtph264pay config-interval=1 pt=96 mtu=1200 ! "
+        "progressreport  silent=false !"
+        "udpsink host=%s port=5000 sync=false async=false",
+        host
+    );
+
+    /*gchar* pipeStr = g_strdup_printf(
+        "appsrc is-live=false name=mysrc format=time "
         "caps=video/x-raw,format=I420 ! "
-        "queue max-size-buffers=1 leaky=downstream ! "
+        "queue max-size-buffers=1 ! "
         "videoconvert ! "
         "nvh264enc repeat-sequence-header=true preset=low-latency tune=ultra-low-latency zerolatency=true "
         "rc-mode=cbr bitrate=20000 gop-size=1 bframes=0 cabac=false "
         "qp-min-i=20 qp-max-i=30 qp-min-p=20 qp-max-p=30 "
         "! video/x-h264,profile=baseline ! "
         "rtph264pay config-interval=1 pt=96 mtu=1200 ! "
-        "queue max-size-buffers=1 leaky=downstream ! "
+        "progressreport  silent=false update-freq=1 !"
+        "queue max-size-buffers=1 ! "
         "udpsink host=%s port=5000 sync=false async=false",
         host
-    );
+    );*/
 
     // BETTER QUALITY THEN ABOVE BUT NOT TESTED
     //    gchar* pipeStr = g_strdup_printf(

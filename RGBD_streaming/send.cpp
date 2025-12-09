@@ -377,7 +377,7 @@ int main(int argc, char **argv) {
     //    Structure improvements : 
     //    -`gop-size = 30` - Increased from 15 for better efficiency(still reasonable for streaming)
 
-    // ULTRA LOW LATENCY ----- TO KEEEEEEEEEPPPPPP H264
+    // ULTRA LOW LATENCY ----- H264
     gchar* pipeStr = g_strdup_printf(
         "appsrc is-live=true name=mysrc format=time "
         "caps=video/x-raw,format=I420 ! "
