@@ -116,7 +116,7 @@ gchar* pipeStr = g_strdup_printf(
     "queue max-size-buffers=1 leaky=downstream ! "
     "videoconvert ! "
     "nvh264enc repeat-sequence-header=true preset=low-latency tune=ultra-low-latency zerolatency=true "
-    "rc-mode=cbr bitrate=20000 gop-size=1 bframes=0 cabac=false "
+    "rc-mode=cbr bitrate=20000 gop-size=5 bframes=0 cabac=false "
     "qp-min-i=20 qp-max-i=30 qp-min-p=20 qp-max-p=30 !"
     " video/x-h264,profile=baseline ! "
     "rtph264pay config-interval=1 pt=96 mtu=1200 ! "
