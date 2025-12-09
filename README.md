@@ -12,9 +12,9 @@ In order to install this project you will need :
 - OpenCV
 - librealsense
 
-Pour utiliser les codes DITS-3D-robot-side : 
+To start the DITS-3D-robot-side server follow these instructions: 
 
-Telecharger la release disponible sous github, extraire le contenu du .zip et placer le dossier extrait 'out' dans le dossier RGBD_streaming.
+Download the latest Release of the submodule DITS-3D-robot-side on github, extract and place the content from the .zip file, a folder named 'out', in the RGBD_streaming folder.
 ```bash
 git clone https://github.com/Skydrag42/DITS-3D-robot-side.git
 
@@ -26,11 +26,11 @@ python -m venv venv
 
 pip install opencv-python dynamixel_sdk matplotlib numpy 
 
-# Brancher le robot en alimentation puis en USB-A à l'ordinateur
+# Plug the robot to its power source and then to the computer using the USB-A cable provided.
 
 python .\master_server.py
 ```
-Le programme master_server est maintenant lancé et est en attente d'instruction  réseau de la part du programme utilisateur. 
+The master_server program is now launched and is waiting for network instructions from the user side's program. 
 
 # Authors 
 This project was made by J. Charvet and R. Debache. during an internship at ENSEIRB-MATMECA (https://enseirb-matmeca.bordeaux-inp.fr/fr).
