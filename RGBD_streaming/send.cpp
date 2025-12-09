@@ -1,7 +1,3 @@
-//
-// Created by IT-JIM 
-// VIDEO2: Decode a video file with opencv and send to a gstreamer pipeline via appsrc
-
 #include <iostream>
 #include <string>
 #include <thread>
@@ -188,18 +184,12 @@ void codeThreadSrcV(GoblinData &data) {
     rs2::temporal_filter temporal;
     rs2::hole_filling_filter hole;
 
-    // --- Spatial Filter ---
-    spatial.set_option(RS2_OPTION_FILTER_MAGNITUDE, 2);
-    spatial.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.5f);
-    spatial.set_option(RS2_OPTION_FILTER_SMOOTH_DELTA, 20);
-    spatial.set_option(RS2_OPTION_HOLES_FILL, 1);
-
-    // --- Temporal Filter ---
+    // === Temporal Filter ===
     temporal.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.4f);
     temporal.set_option(RS2_OPTION_FILTER_SMOOTH_DELTA, 20);
     temporal.set_option(RS2_OPTION_HOLES_FILL, 2);
 
-    // --- Hole Filling Filter ---
+    // === Hole Filling Filter ===
     hole.set_option(RS2_OPTION_HOLES_FILL, 1);
         
 
@@ -231,12 +221,19 @@ void codeThreadSrcV(GoblinData &data) {
     int frameCount = 0;
     auto intr = selection.get_stream(RS2_STREAM_DEPTH).as<rs2::video_stream_profile>().get_intrinsics();
     this_thread::sleep_for(chrono::milliseconds(30));
-    std::cout << "fx=" << intr.fx
+    std::cout << "DEPTH intrinsics" << "fx=" << intr.fx
         << " fy=" << intr.fy
         << " ppx=" << intr.ppx
         << " ppy=" << intr.ppy
         << std::endl;
 
+    auto intrinsics = selection.get_stream(RS2_STREAM_COLOR).as<rs2::video_stream_profile>().get_intrinsics();
+    this_thread::sleep_for(chrono::milliseconds(30));
+    std::cout << "COLOR intrinsics" << "fx=" << intrinsics.fx
+        << " fy=" << intrinsics.fy
+        << " ppx=" << intrinsics.ppx
+        << " ppy=" << intrinsics.ppy
+        << std::endl;
     
     this_thread::sleep_for(chrono::milliseconds(30));
     
@@ -254,15 +251,15 @@ void codeThreadSrcV(GoblinData &data) {
         }
 
         // Wait for the next set of frames from the camera
-        auto frames = rs_pipe.wait_for_frames(); // align done in Realsense Unity Package
-        //frames = align_to_color.process(frames);
+        auto frames = rs_pipe.wait_for_frames(); 
+
+        // Aligning done in Realsense Unity Package
 
         auto depth = frames.get_depth_frame();
         auto color = frames.get_color_frame();
 
         //// Apply filters in recommended order
         depth = thr_filter.process(depth);
-        //depth = spatial.process(depth);
         depth = temporal.process(depth);
         depth = hole.process(depth);
 
@@ -289,10 +286,10 @@ void codeThreadSrcV(GoblinData &data) {
 
         // Create a GStreamer buffer and copy data to it via a map
  
-        GstBuffer *buffer = gst_buffer_new_and_alloc(bufferSize * 2); // attention si concatene pas oublier le fois 2
+        GstBuffer *buffer = gst_buffer_new_and_alloc(bufferSize * 2);
         GstMapInfo m;
         gst_buffer_map(buffer, &m, GST_MAP_WRITE);
-        memcpy(m.data, frame_combined, bufferSize * 2); // attention si concatene pas oublier le fois 2
+        memcpy(m.data, frame_combined, bufferSize * 2); 
         gst_buffer_unmap(buffer, &m);
 
         // Set up timestamp
@@ -363,10 +360,6 @@ int main(int argc, char **argv) {
     cout << "Live video from camera : " << data.fileName << endl;
 
     // Create GSTreamer pipeline
-    // Note: we don't know image size or framerate yet !
-    // We'll give preliminary caps only which we will replace later
-    // format=time is not really needed for video, but audio appsrc will not work without it !
-   
 
     //   Quality enhancements :
     //    -`preset=hq` - High quality preset instead of default
@@ -384,40 +377,6 @@ int main(int argc, char **argv) {
     //    Structure improvements : 
     //    -`gop-size = 30` - Increased from 15 for better efficiency(still reasonable for streaming)
 
-    // avec h265
-
-    //gchar* pipeStr = g_strdup_printf(
-    //    "appsrc is-live=true name=mysrc format=time "
-    //    "caps=video/x-raw,format=I420 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "videoconvert ! "
-    //    "nvh265enc repeat-sequence-header=true preset=low-latency tune=ultra-low-latency zerolatency=true "
-    //    "rc-mode=cbr bitrate=6000 gop-size=1 bframes=0 "
-    //    "qp-min-i=20 qp-max-i=30 qp-min-p=20 qp-max-p=30 "
-    //    "! video/x-h265 ! "
-    //    "rtph265pay config-interval=1 pt=96 mtu=1200 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "udpsink host=%s port=5000 sync=false async=false",
-    //    host
-    //);
-
-    // test en coursssss
-    
-    //gchar* pipeStr = g_strdup_printf(
-    //    "appsrc is-live=true name=mysrc format=time "
-    //    "caps=video/x-raw,format=I420 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "videoconvert ! "
-    //    "nvh265enc repeat-sequence-header=true preset=low-latency tune=ultra-low-latency zerolatency=true "
-    //    "rc-mode=cbr bitrate=6000 gop-size=1 bframes=0 "
-    //    "! video/x-h265,profile=main ! "
-    //    "rtph265pay config-interval=1 pt=96 mtu=1200 ! "
-    //    "udpsink host=%s port=5000 sync=false async=false",
-    //    host
-    //);
-
- 
-
     // ULTRA LOW LATENCY ----- TO KEEEEEEEEEPPPPPP H264
     gchar* pipeStr = g_strdup_printf(
         "appsrc is-live=true name=mysrc format=time "
@@ -433,118 +392,6 @@ int main(int argc, char **argv) {
         "udpsink host=%s port=5000 sync=false async=false",
         host
     ); 
-
-    // BETTER QUALITY THEN ABOVE BUT NOT TESTED
-    //    gchar* pipeStr = g_strdup_printf(
-    //    "appsrc is-live=true name=mysrc format=time "
-    //    "caps=video/x-raw,format=I420 ! "
-    //    "queue max-size-buffers=1 leaky=downstream !"
-    //    "videoconvert ! "
-    //    "nvh264enc repeat-sequence-header=true preset=low-latency tune=ultra-low-latency zerolatency=true "
-    //    "rc-mode=cbr bitrate=0 gop-size=5 bframes=0 cabac=false "
-    //    "qp-min-i=20 qp-max-i=30 qp-min-p=20 qp-max-p=30 "
-    //    "! video/x-h264,profile=high ! "
-    //    "rtph264pay config-interval=1 pt=96 mtu=1200 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "udpsink host=%s port=5000 sync=false async=false",
-    //    host
-    //);
-
-    // ULTRA QUALITY but latency de fou
-
-    //gchar* pipeStr = g_strdup_printf(
-    //    "appsrc is-live=true name=mysrc format=time "
-    //    "caps=video/x-raw,format=I420 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "videoconvert ! "
-    //    "nvh264enc repeat-sequence-header=true preset=p7 tune=high-quality "
-    //    "rc-mode=vbr bitrate=35000 max-bitrate=40000 "
-    //    "gop-size=60 bframes=2 cabac=true "
-    //    "qp-min-i=0 qp-max-i=40 qp-min-p=0 qp-max-p=40 "
-    //    "! video/x-h264,profile=high ! "
-    //    "rtph264pay config-interval=1 pt=96 mtu=1200 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "udpsink host=%s port=5000 sync=false async=false",
-    //    host
-    //);
-
-    // FULL TEST 
-
-
-        //gchar* pipeStr = g_strdup_printf(
-        //    "appsrc is-live=true name=mysrc format=time "
-        //    "caps=video/x-raw,format=I420 ! "
-        //    "queue max-size-buffers=1 leaky=downstream !"
-        //    "videoconvert ! "
-        //    "nvh264enc repeat-sequence-header=true preset=low-latency tune=ultra-low-latency zerolatency=true "
-        //    "rc-mode=cbr bitrate=0 gop-size=5 bframes=0 cabac=true "
-        //    "qp-min-i=20 qp-max-i=30 qp-min-p=20 qp-max-p=30 "
-        //    "! video/x-h264,profile=high ! "
-        //    "rtph264pay config-interval=1 pt=96 mtu=1200 ! "
-        //    "queue max-size-buffers=1 leaky=downstream ! "
-        //    "udpsink host=%s port=5000 sync=false async=false",
-        //    host
-        //);
-
-    // 
-    //    gchar* pipeStr = g_strdup_printf(
-    //    "appsrc is-live=true name=mysrc format=time "
-    //    "caps=video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "videoconvert ! "
-    //    "nvh264enc repeat-sequence-header=true preset=low-latency tune=ultra-low-latency zerolatency=true "
-    //    "rc-mode=cbr bitrate=0 gop-size=10 bframes=0 cabac=true "
-    //    "qp-min-i=20 qp-max-i=30 qp-min-p=20 qp-max-p=30 "
-    //    "! video/x-h264,profile=baseline ! "
-    //    "rtph264pay config-interval=1 pt=96 mtu=1200 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "udpsink host=%s port=5000 sync=false async=false",
-    //    host
-    //);
-
-    //gchar* pipeStr = g_strdup_printf(
-    //    "appsrc is-live=true name=mysrc format=time "
-    //    "caps=video/x-raw,format=I420 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "videoconvert ! "
-    //    "nvh264enc preset=llhp tune=zerolatency rc-mode=cbr bitrate=6000 "
-    //    "gop-size=1 bframes=0 cabac=false "
-    //    "qp-min-i=20 qp-max-i=30 qp-min-p=20 qp-max-p=30 ! "
-    //    "video/x-h264,profile=baseline ! "
-    //    "rtph264pay config-interval=1 pt=96 mtu=1200 ! "
-    //    "queue max-size-buffers=1 leaky=downstream ! "
-    //    "udpsink host=%s port=5000 sync=false async=false",
-    //    host
-    //);
-
-
-
-    //gchar* pipeStr = g_strdup_printf(
-    //    "appsrc is-live=true format=time name=mysrc caps=video/x-raw,format=I420 !"
-    //    "queue max-size-buffers=5 leaky=downstream !"
-    //    "videoconvert !"
-    //    "nvh264enc bitrate=20000 gop-size=10 repeat-sequence-header=true preset=hq rc-mode=cbr "
-    //    "bframes=0 cabac=true spatial-aq=true aq-strength=8 qp-min-i=16 qp-max-i=26 qp-min-p=18 qp-max-p=28 !"
-    //    "video/x-h264,profile=high !"
-    //    "rtph264pay config-interval=1 pt=96 mtu=1200 !"
-    //    "queue max-size-time=100000000 !" 
-    //    "udpsink host=%s port=5000",
-    //    host
-    //);
-
-    //gchar* pipeStr = g_strdup_printf(
-    //    "appsrc is-live=true name=mysrc format=time caps=video/x-raw,format=I420 !"
-    //    "queue max-size-buffers=5 leaky=downstream !"
-    //    "videoconvert !"
-    //    "nvh264enc bitrate=20000 gop-size=10 repeat-sequence-header=true preset=hq rc-mode=cbr "
-    //    "bframes=0 cabac=true spatial-aq=true aq-strength=8 qp-min-i=16 qp-max-i=26 qp-min-p=18 qp-max-p=28 !"
-    //    "video/x-h264,profile=high !"
-    //    "rtph264pay config-interval=1 pt=96 mtu=1200 !"
-    //    "queue max-size-time=100000000 !"
-    //    "udpsink host=%s port=5000",
-    //    host
-    //);
-
 
     cout << pipeStr << endl;
 

@@ -1,5 +1,3 @@
-// Created by IT-JIM
-// VIDEO1 : Send video to appsink, display with cv::imshow()
 
 #include <iostream>
 #include <string>

@@ -30,7 +30,6 @@ void decodeI420toRGBA_libyuv(const uint8_t* srcI420, uint8_t* dstRGBA, int width
     const uint8_t* u_plane = srcI420 + (width * height);
     const uint8_t* v_plane = srcI420 + (width * height) + (width * height / 4);
 
-    // Single libyuv function call replaces all your loops!
     int result = libyuv::I420ToARGB(
         y_plane, width,            // Y plane and stride
         u_plane, width / 2,        // U plane and stride
